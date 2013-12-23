@@ -1,20 +1,18 @@
-from collections import Sequence
-
 import ctypes
-from ctypes import (POINTER, Structure, Union, WinError, c_int, WINFUNCTYPE,
-                    get_last_error)
+from ctypes import POINTER, c_int
 from ctypes.wintypes import (DWORD, LPVOID, LPWSTR, BOOL, WORD, LPBYTE, HANDLE,
                              ULONG, HWND, LPCWSTR, HINSTANCE, HKEY, BYTE)
-from . import win32_constants as constants
+from .ctypes_utils import Win32Func, INPUT_PARAM, OUTPUT_PARAM
 
-class SECURITY_ATTRIBUTES(Structure):
+
+class SECURITY_ATTRIBUTES(ctypes.Structure):
     _fields_ = (
         ('nLength', DWORD),
         ('lpSecurityDescriptor', LPVOID),
         ('bInheritHandle', BOOL)
     )
 
-class STARTUPINFO(Structure):
+class STARTUPINFO(ctypes.Structure):
     _fields_ = (
         ('cb', DWORD),
         ('lpReserved', LPWSTR),
@@ -36,7 +34,7 @@ class STARTUPINFO(Structure):
         ('hStdError', HANDLE)
     )
 
-class PROCESS_INFORMATION(Structure):
+class PROCESS_INFORMATION(ctypes.Structure):
     _fields_ = (
         ('hProcess', HANDLE),
         ('hThread', HANDLE),
@@ -44,8 +42,8 @@ class PROCESS_INFORMATION(Structure):
         ('dwThreadId', DWORD)
     )
 
-class SHELLEXECUTEINFO(Structure):
-    class _IconOrMonitor(Union):
+class SHELLEXECUTEINFO(ctypes.Structure):
+    class _IconOrMonitor(ctypes.Union):
         _fields_ = (
             ('hIcon', HANDLE),
             ('hMonitor', HANDLE)
@@ -70,52 +68,11 @@ class SHELLEXECUTEINFO(Structure):
         ('hProcess', HANDLE)
     )
 
-class SID_IDENTIFIER_AUTHORITY(Structure):
+class SID_IDENTIFIER_AUTHORITY(ctypes.Structure):
     _fields_ = (('Value', BYTE * 6), )
 
-SECURITY_NT_AUTHORITY = (SID_IDENTIFIER_AUTHORITY)((0, 0, 0, 0, 0, 5))
-
-class SID(Structure):
+class SID(ctypes.Structure):
     pass
-
-INPUT_PARAM = 1
-OUTPUT_PARAM = 2
-
-def DEFAULT_SUCCESS(result, *args):
-    return result != 0
-
-def Win32Func(function_name, module_name, result_type, argument_descriptors,
-              success_predicate=DEFAULT_SUCCESS):
-    def head(x):
-        return x[0] if isinstance(x, Sequence) else x
-
-    def tail(x):
-        return x[1:] if isinstance(x, Sequence) else tuple()
-
-    def get_param_flags(obj):
-        param_flags = tail(obj)
-        return param_flags if param_flags else (INPUT_PARAM, )
-
-    module = getattr(ctypes.windll, module_name)
-    arg_types = (head(tup) for tup in argument_descriptors)
-    param_flags = tuple(get_param_flags(tup) for tup in argument_descriptors)
-
-    prototype = WINFUNCTYPE(
-        result_type, *arg_types, use_last_error=True)
-    function = prototype((function_name, module), param_flags)
-
-    if success_predicate:
-        def errcheck(result, func, args):
-            is_unknown_restype = (success_predicate is DEFAULT_SUCCESS
-                and result_type != BOOL)
-            if (not is_unknown_restype 
-                and not success_predicate(result, func, args)):
-                raise WinError(get_last_error())
-            return args
-
-        function.errcheck = errcheck
-
-    return function
 
 ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
                            [POINTER(SHELLEXECUTEINFO)])
@@ -123,7 +80,7 @@ ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
 CloseHandle = Win32Func('CloseHandle', 'kernel32', BOOL, [HANDLE])
 
 WaitForSingleObject = Win32Func('WaitForSingleObject', 'kernel32', DWORD,
-    [HANDLE, DWORD], lambda result, *_: result != constants.WAIT_FAILED)
+    [HANDLE, DWORD], lambda result, *_: result != WAIT_FAILED)
 
 AllocateAndInitializeSid = Win32Func(
     'AllocateAndInitializeSid', 'advapi32', BOOL, 
@@ -148,12 +105,8 @@ CheckTokenMembership = Win32Func('CheckTokenMembership', 'advapi32', BOOL,
 
 SetStdHandle = Win32Func('SetStdHandle', 'kernel32', BOOL, [DWORD, HANDLE])
 
-
-def is_handle_valid(h, *_):
-    return h != 0 and h != constants.INVALID_HANDLE_VALUE
-
 GetStdHandle = Win32Func('GetStdHandle', 'kernel32', HANDLE, [DWORD],
-                         is_handle_valid)
+                         lambda h, *_: h and h != INVALID_HANDLE_VALUE)
 
 AttachConsole = Win32Func('AttachConsole', 'kernel32', BOOL,
                           [(DWORD, INPUT_PARAM, 'dwProcessId')])
@@ -164,7 +117,7 @@ CreateProcess = Win32Func(
     (LPWSTR, INPUT_PARAM, 'lpCommandLine'),
     (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpProcessAttributes', None),
     (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpThreadAttributes', None),
-    (BOOL, INPUT_PARAM, 'bInheritHandles', None),
+    (BOOL, INPUT_PARAM, 'bInheritHandles'),
     (DWORD, INPUT_PARAM, 'dwCreationFlags', 0),
     (LPVOID, INPUT_PARAM, 'lpEnvironment', None),
     (LPCWSTR, INPUT_PARAM, 'lpCurrentDirectory', None),
@@ -197,3 +150,96 @@ MsgWaitForMultipleObjectsEx = Win32Func(
     (DWORD, INPUT_PARAM, 'dwMilliseconds'),
     (DWORD, INPUT_PARAM, 'dwWakeMask'),
     (DWORD, INPUT_PARAM, 'dwFlags')])
+
+################################################################################
+# ShellExecuteEx()
+SEE_MASK_DEFAULT = 0x00000000
+SEE_MASK_CLASSNAME = 0x00000001
+SEE_MASK_CLASSKEY = 0x00000003
+SEE_MASK_IDLIST = 0x00000004
+SEE_MASK_INVOKEIDLIST = 0x0000000C
+SEE_MASK_ICON = 0x00000010
+SEE_MASK_HOTKEY = 0x00000020
+SEE_MASK_NOCLOSEPROCESS = 0x00000040
+SEE_MASK_CONNECTNETDRV = 0x00000080
+SEE_MASK_NOASYNC = 0x00000100
+SEE_MASK_FLAG_DDEWAIT = 0x00000100
+SEE_MASK_DOENVSUBST = 0x00000200
+SEE_MASK_FLAG_NO_UI = 0x00000400
+SEE_MASK_UNICODE = 0x00004000
+SEE_MASK_NO_CONSOLE = 0x00008000
+SEE_MASK_ASYNCOK = 0x00100000
+SEE_MASK_NOQUERYCLASSSTORE = 0x01000000
+SEE_MASK_HMONITOR = 0x00200000
+SEE_MASK_NOZONECHECKS = 0x00800000
+SEE_MASK_WAITFORINPUTIDLE = 0x02000000
+
+SW_HIDE = 0
+SW_MAXIMIZE = 3
+SW_MINIMIZE = 6
+SW_RESTORE = 9
+SW_SHOW = 5
+SW_SHOWDEFAULT = 10
+SW_SHOWMAXIMIZED = 3
+SW_SHOWMINIMIZED = 2
+SW_SHOWMINNOACTIVE = 7
+SW_SHOWNA = 8
+SW_SHOWNOACTIVATE = 4
+SW_SHOWNORMAL = 1
+################################################################################
+# GetStdHandle()
+STD_INPUT_HANDLE = -10
+STD_OUTPUT_HANDLE = -11
+STD_ERROR_HANDLE = -12
+
+INVALID_HANDLE_VALUE = -1
+
+# AttachConsole()
+ATTACH_PARENT_PROCESS = -1
+ERROR_ACCESS_DENIED = 5
+
+# Timeouts
+INFINITE = 0xFFFFFFFF
+
+# DuplicateHandle()
+DUPLICATE_CLOSE_SOURCE = 0x00000001
+DUPLICATE_SAME_ACCESS = 0x00000002
+
+# Sids, impersonation tokens, yadda yadda yadda
+SECURITY_BUILTIN_DOMAIN_RID = 0x00000020
+SECURITY_NT_AUTHORITY = SID_IDENTIFIER_AUTHORITY((0, 0, 0, 0, 0, 5))
+
+DOMAIN_ALIAS_RID_ADMINS = 0x00000220
+DOMAIN_ALIAS_RID_USERS = 0x00000221
+DOMAIN_ALIAS_RID_GUESTS = 0x00000222
+DOMAIN_ALIAS_RID_POWER_USERS = 0x00000223
+
+
+################################################################################
+# WaitForMultipleObjectsEx() and friends
+
+QS_ALLEVENTS = 0x04BF
+QS_ALLINPUT = 0x04FF
+QS_ALLPOSTMESSAGE = 0x0100
+QS_HOTKEY = 0x0080
+QS_INPUT = 0x407
+QS_KEY = 0x0001
+QS_MOUSE = 0x0006
+QS_MOUSEBUTTON = 0x0004
+QS_MOUSEMOVE = 0x0002
+QS_PAINT = 0x0020
+QS_POSTMESSAGE = 0x0008
+QS_RAWINPUT = 0x0400
+QS_SENDMESSAGE = 0x0040
+QS_TIMER = 0x0010
+
+MWMO_ALERTABLE = 0x0002
+MWMO_INPUTAVAILABLE = 0x0004
+MWMO_WAITALL = 0x0001
+
+WAIT_ABANDONED = 0x00000080
+WAIT_ABANDONED_0 = 0x00000080
+WAIT_FAILED = 0xFFFFFFFF
+WAIT_IO_COMPLETION = 0x000000C0
+WAIT_OBJECT_0 = 0x00000000
+WAIT_TIMEOUT = 0x00000102

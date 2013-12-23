@@ -1,25 +1,24 @@
 import time
 import ctypes
 import traceback
-import elevate 
-import msvcrt
+from collections import namedtuple
 import os
 import re
 import sys
-from elevate import (SECURITY_NT_AUTHORITY, SECURITY_BUILTIN_DOMAIN_RID,
-                     DOMAIN_ALIAS_RID_ADMINS, SEE_MASK_FLAG_NO_UI,
-                     SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS,
-                     SEE_MASK_UNICODE, SW_SHOWNORMAL, INFINITE, WAIT_FAILED)
+
+import elevate.win32 as win32
+import elevate.libc as libc
+
 def is_elevated():
     admin_sid = None
     try:
-        admin_sid = elevate.AllocateAndInitializeSid(
-            ctypes.byref(SECURITY_NT_AUTHORITY),
-            2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS)
+        admin_sid = win32.AllocateAndInitializeSid(
+            ctypes.byref(win32.SECURITY_NT_AUTHORITY),
+            2, win32.SECURITY_BUILTIN_DOMAIN_RID, win32.DOMAIN_ALIAS_RID_ADMINS)
 
-        return bool(elevate.CheckTokenMembership(SidToCheck=admin_sid))
+        return bool(win32.CheckTokenMembership(SidToCheck=admin_sid))
     finally:
-        if admin_sid: elevate.FreeSid(admin_sid)
+        if admin_sid: win32.FreeSid(admin_sid)
 
 
 def argv_to_command_line(args):
@@ -43,49 +42,69 @@ def whereami():
     return os.path.abspath(sys.argv[0])
 
 def duplicate_handle(h):
-    return elevate.DuplicateHandle(
-        elevate.GetCurrentProcess(), h, elevate.GetCurrentProcess(), 0,
-        False, elevate.DUPLICATE_SAME_ACCESS)
+    return win32.DuplicateHandle(
+        win32.GetCurrentProcess(), h, win32.GetCurrentProcess(), 0,
+        False, win32.DUPLICATE_SAME_ACCESS)
 
-def write_console(s, console=elevate.STD_OUTPUT_HANDLE):
-    wcslen = ctypes.cdll.msvcrt.wcslen
-    wcslen.argtypes = [ctypes.c_wchar_p]
-    wcslen.restype = ctypes.c_size_t
-
+def write_console(s, console=win32.STD_OUTPUT_HANDLE):
     wide_string = ctypes.c_wchar_p(s)
-    elevate.WriteConsole(elevate.GetStdHandle(console),
-                         wide_string, cslen(wide_string))
+    win32.WriteConsole(win32.GetStdHandle(console),
+                       wide_string, libc.wcslen(wide_string))
+
+
+def print_console(*args):
+    write_console("%s\n" % args)
 
 def connect_to_parent_console():
     try:
-        elevate.AttachConsole(elevate.ATTACH_PARENT_PROCESS)
+        win32.AttachConsole(win32.ATTACH_PARENT_PROCESS)
     except OSError as e:
-        if e.winerror != elevate.ERROR_ACCESS_DENIED:
+        if e.winerror != win32.ERROR_ACCESS_DENIED:
             raise
-    standard_handles = ((elevate.STD_INPUT_HANDLE, 0, 'stdin', 'r'),
-                        (elevate.STD_OUTPUT_HANDLE, 1, 'stdout', 'w'),
-                        (elevate.STD_ERROR_HANDLE, 2, 'stderr', 'w'))
 
-    for handle_constant, target_fd, stream_name, mode in standard_handles:
-        stream = getattr(sys, stream_name)
+    StandardHandleInfo = namedtuple('StandardHandleInfo',
+                                    'name filename win32_constant fd mode')
+    standard_handles = (
+        StandardHandleInfo(
+            'stdin', 'CONIN$', win32.STD_INPUT_HANDLE, 0, 'r'),
+        StandardHandleInfo(
+            'stdout', 'CONOUT$', win32.STD_OUTPUT_HANDLE, 1, 'w'),
+        StandardHandleInfo(
+            'stderr', 'CONOUT$', win32.STD_ERROR_HANDLE, 2, 'w'))
+
+    std_streams = libc.get_std_streams()
+
+    for handle_info in standard_handles:
+        stream = getattr(sys, handle_info.name)
         if stream: stream.flush()
-        handle = duplicate_handle(elevate.GetStdHandle(handle_constant))
-        fd = msvcrt.open_osfhandle(handle, os.O_TEXT)
-        os.dup2(fd, target_fd)
-        os.close(fd)
-        stream = os.fdopen(target_fd, mode)
-        setattr(sys, stream_name, stream)
+        
+        handle = duplicate_handle(
+            win32.GetStdHandle(handle_info.win32_constant))
+        fd = libc.open_osfhandle(handle, libc.O_TEXT)
+        libc.dup2(fd, handle_info.fd)
+        libc.close(fd)
+        
+        setattr(sys, handle_info.name, 
+                libc.fdopen(handle_info.fd, handle_info.mode))
 
+        # associate C stdout/stdin/stderr with the console
+        libc.freopen(handle_info.filename, handle_info.mode,
+                        std_streams[handle_info.fd])
 
 def main():
+    print("before")
     if is_elevated():
         # windowed subsystem
         connect_to_parent_console()
-        print("Hi!")
+        print("printafter\n")
+        write_console("writeconsoleafer\n")
+
+        libc.printf("printf after\n")
+
         time.sleep(5)
     else:
         # console subsystem
-        exec_info = elevate.SHELLEXECUTEINFO()
+        exec_info = win32.SHELLEXECUTEINFO()
         exec_info.cbSize = ctypes.sizeof(exec_info)
         exec_info.lpFile = pythonw_interpreter()
         exec_info.lpParameters = argv_to_command_line([ whereami() ])
@@ -94,16 +113,14 @@ def main():
                         | SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE)
         exec_info.nShow = SW_SHOWNORMAL
 
-        result = elevate.ShellExecuteEx(ctypes.byref(exec_info))
+        result = win32.ShellExecuteEx(ctypes.byref(exec_info))
 
-        # elevate.WaitForSingleObject(exec_info.hProcess, INFINITE)
+        # win32.WaitForSingleObject(exec_info.hProcess, INFINITE)
         time.sleep(10)
 
-        elevate.CloseHandle(exec_info.hProcess)
+        win32.CloseHandle(exec_info.hProcess)
 
 
-        # printf("hi");
-        # //printf("hello from privileged child1!\n");
 
         # STARTUPINFOW startup_info{ sizeof(startup_info) };
         # PROCESS_INFORMATION process_info;
