@@ -12,6 +12,7 @@ class SECURITY_ATTRIBUTES(ctypes.Structure):
         ('bInheritHandle', BOOL)
     )
 
+
 class STARTUPINFO(ctypes.Structure):
     _fields_ = (
         ('cb', DWORD),
@@ -34,6 +35,7 @@ class STARTUPINFO(ctypes.Structure):
         ('hStdError', HANDLE)
     )
 
+
 class PROCESS_INFORMATION(ctypes.Structure):
     _fields_ = (
         ('hProcess', HANDLE),
@@ -42,7 +44,9 @@ class PROCESS_INFORMATION(ctypes.Structure):
         ('dwThreadId', DWORD)
     )
 
+
 class SHELLEXECUTEINFO(ctypes.Structure):
+
     class _IconOrMonitor(ctypes.Union):
         _fields_ = (
             ('hIcon', HANDLE),
@@ -68,8 +72,10 @@ class SHELLEXECUTEINFO(ctypes.Structure):
         ('hProcess', HANDLE)
     )
 
+
 class SID_IDENTIFIER_AUTHORITY(ctypes.Structure):
     _fields_ = (('Value', BYTE * 6), )
+
 
 class SID(ctypes.Structure):
     pass
@@ -79,29 +85,31 @@ ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
 
 CloseHandle = Win32Func('CloseHandle', 'kernel32', BOOL, [HANDLE])
 
-WaitForSingleObject = Win32Func('WaitForSingleObject', 'kernel32', DWORD,
-    [HANDLE, DWORD], lambda result, *_: result != WAIT_FAILED)
+WaitForSingleObject = Win32Func(
+    'WaitForSingleObject', 'kernel32', DWORD, [HANDLE, DWORD],
+    lambda result, *_: result != WAIT_FAILED)
 
 AllocateAndInitializeSid = Win32Func(
-    'AllocateAndInitializeSid', 'advapi32', BOOL, 
+    'AllocateAndInitializeSid', 'advapi32', BOOL,
     [(POINTER(SID_IDENTIFIER_AUTHORITY), INPUT_PARAM, 'pIdentifierAuthority'),
-    (BYTE, INPUT_PARAM, 'nSubAuthorityCount', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority0', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority1', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority2', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority3', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority4', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority5', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority6', 0),
-    (DWORD, INPUT_PARAM, 'dwSubAuthority7', 0),
-    (POINTER(POINTER(SID)), OUTPUT_PARAM, 'pSid')])
+     (BYTE, INPUT_PARAM, 'nSubAuthorityCount', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority0', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority1', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority2', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority3', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority4', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority5', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority6', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority7', 0),
+     (POINTER(POINTER(SID)), OUTPUT_PARAM, 'pSid')])
 
 FreeSid = Win32Func('FreeSid', 'advapi32', POINTER(SID), [POINTER(SID)])
 
-CheckTokenMembership = Win32Func('CheckTokenMembership', 'advapi32', BOOL, 
+CheckTokenMembership = Win32Func(
+    'CheckTokenMembership', 'advapi32', BOOL,
     [(HANDLE, INPUT_PARAM, 'TokenHandle', None),
-    (POINTER(SID), INPUT_PARAM, 'SidToCheck'),
-    (POINTER(BOOL), OUTPUT_PARAM, 'IsMember')])
+     (POINTER(SID), INPUT_PARAM, 'SidToCheck'),
+     (POINTER(BOOL), OUTPUT_PARAM, 'IsMember')])
 
 SetStdHandle = Win32Func('SetStdHandle', 'kernel32', BOOL, [DWORD, HANDLE])
 
@@ -114,18 +122,18 @@ AttachConsole = Win32Func('AttachConsole', 'kernel32', BOOL,
 CreateProcess = Win32Func(
     'CreateProcessW', 'kernel32', BOOL,
     [(LPCWSTR, INPUT_PARAM, 'lpApplicationName'),
-    (LPWSTR, INPUT_PARAM, 'lpCommandLine'),
-    (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpProcessAttributes', None),
-    (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpThreadAttributes', None),
-    (BOOL, INPUT_PARAM, 'bInheritHandles'),
-    (DWORD, INPUT_PARAM, 'dwCreationFlags', 0),
-    (LPVOID, INPUT_PARAM, 'lpEnvironment', None),
-    (LPCWSTR, INPUT_PARAM, 'lpCurrentDirectory', None),
-    (POINTER(STARTUPINFO), INPUT_PARAM, 'lpStartupInfo'),
-    (POINTER(PROCESS_INFORMATION), OUTPUT_PARAM, 'lpProcessInformation')])
+     (LPWSTR, INPUT_PARAM, 'lpCommandLine'),
+     (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpProcessAttributes', None),
+     (POINTER(SECURITY_ATTRIBUTES), INPUT_PARAM, 'lpThreadAttributes', None),
+     (BOOL, INPUT_PARAM, 'bInheritHandles'),
+     (DWORD, INPUT_PARAM, 'dwCreationFlags', 0),
+     (LPVOID, INPUT_PARAM, 'lpEnvironment', None),
+     (LPCWSTR, INPUT_PARAM, 'lpCurrentDirectory', None),
+     (POINTER(STARTUPINFO), INPUT_PARAM, 'lpStartupInfo'),
+     (POINTER(PROCESS_INFORMATION), OUTPUT_PARAM, 'lpProcessInformation')])
 
 DuplicateHandle = Win32Func(
-    'DuplicateHandle', 'kernel32', BOOL, 
+    'DuplicateHandle', 'kernel32', BOOL,
     [(HANDLE, INPUT_PARAM, 'hSourceProcessHandle'),
      (HANDLE, INPUT_PARAM, 'hSourceHandle'),
      (HANDLE, INPUT_PARAM, 'hTargetProcessHandle'),
@@ -136,22 +144,23 @@ DuplicateHandle = Win32Func(
 
 GetCurrentProcess = Win32Func('GetCurrentProcess', 'kernel32', HANDLE, [])
 
-WriteConsole = Win32Func('WriteConsoleW', 'kernel32', BOOL,
+WriteConsole = Win32Func(
+    'WriteConsoleW', 'kernel32', BOOL,
     [(HANDLE, INPUT_PARAM, 'hConsoleOutput'),
-    (LPCWSTR, INPUT_PARAM, 'lpBuffer'),
-    (DWORD, INPUT_PARAM, 'nNumberOfCharsToWrite'),
-    (POINTER(DWORD), OUTPUT_PARAM, 'lpNumberOfCharsWritten'),
-    (LPVOID, INPUT_PARAM, 'lpReserved', None)])
+     (LPCWSTR, INPUT_PARAM, 'lpBuffer'),
+     (DWORD, INPUT_PARAM, 'nNumberOfCharsToWrite'),
+     (POINTER(DWORD), OUTPUT_PARAM, 'lpNumberOfCharsWritten'),
+     (LPVOID, INPUT_PARAM, 'lpReserved', None)])
 
 MsgWaitForMultipleObjectsEx = Win32Func(
     'MsgWaitForMultipleObjectsEx', 'user32', DWORD,
     [(DWORD, INPUT_PARAM, 'nCount'),
-    (POINTER(HANDLE), INPUT_PARAM, 'pHandles'),
-    (DWORD, INPUT_PARAM, 'dwMilliseconds'),
-    (DWORD, INPUT_PARAM, 'dwWakeMask'),
-    (DWORD, INPUT_PARAM, 'dwFlags')])
+     (POINTER(HANDLE), INPUT_PARAM, 'pHandles'),
+     (DWORD, INPUT_PARAM, 'dwMilliseconds'),
+     (DWORD, INPUT_PARAM, 'dwWakeMask'),
+     (DWORD, INPUT_PARAM, 'dwFlags')])
 
-################################################################################
+#
 # ShellExecuteEx()
 SEE_MASK_DEFAULT = 0x00000000
 SEE_MASK_CLASSNAME = 0x00000001
@@ -186,7 +195,7 @@ SW_SHOWMINNOACTIVE = 7
 SW_SHOWNA = 8
 SW_SHOWNOACTIVATE = 4
 SW_SHOWNORMAL = 1
-################################################################################
+#
 # GetStdHandle()
 STD_INPUT_HANDLE = -10
 STD_OUTPUT_HANDLE = -11
@@ -215,7 +224,7 @@ DOMAIN_ALIAS_RID_GUESTS = 0x00000222
 DOMAIN_ALIAS_RID_POWER_USERS = 0x00000223
 
 
-################################################################################
+#
 # WaitForMultipleObjectsEx() and friends
 
 QS_ALLEVENTS = 0x04BF
