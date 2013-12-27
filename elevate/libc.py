@@ -8,6 +8,7 @@ if ctypes.sizeof(ctypes.c_voidp) == 8:
 else:
     c_uintptr, c_intptr = ctypes.c_uint32, ctypes.c_int32
 
+
 class FILE(ctypes.Structure):
     _fields_ = (
         ('_ptr', c_char_p),

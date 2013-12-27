@@ -6,6 +6,8 @@ from . import win32
 
 
 def is_elevated():
+    """Return True if the current user has superuser privileges, False
+    otherwise"""
     admin_sid = None
     try:
         admin_sid = win32.AllocateAndInitializeSid(
@@ -13,7 +15,7 @@ def is_elevated():
             2, win32.SECURITY_BUILTIN_DOMAIN_RID,
             win32.DOMAIN_ALIAS_RID_ADMINS)
 
-        return bool(win32.CheckTokenMembership(SidToCheck=admin_sid))
+        return bool(win32.CheckTokenMembership(sid_to_check=admin_sid))
     finally:
         if admin_sid:
             win32.FreeSid(admin_sid)
@@ -46,19 +48,18 @@ class WndProc(metaclass=abc.ABCMeta):
     """Implement this interface to to customise window behaviour."""
 
     @abc.abstractmethod
-    def wnd_proc(self, window_handle, message_id, wParam, lParam):
+    def wnd_proc(self, window_handle, message_id, w_param, l_param):
         """Process Window messages; return type depends on the message kind.
 
         Default implementation calls DefWindowProc()
         """
-        return win32.DefWindowProc(window_handle, message_id, wParam, lParam)
-
-
-_refdata = weakref.WeakKeyDictionary()
+        return win32.DefWindowProc(window_handle, message_id, w_param, l_param)
 
 
 def _add_refdata_for_item(item, data):
-    _refdata.setdefault(item, []).append(data)
+    """Weakly associates some data with |item|."""
+    _add_refdata_for_item.s_refdata.setdefault(item, []).append(data)
+_add_refdata_for_item.s_refdata = weakref.WeakKeyDictionary()
 
 
 class WindowClass(WndProc):
@@ -69,7 +70,7 @@ class WindowClass(WndProc):
             return klass._shared_instance
         except AttributeError:
             klass._shared_instance = klass(
-                'me.nickhutchinson.elevate.wnd_class')        
+                'me.nickhutchinson.elevate.wnd_class')
             return klass._shared_instance
 
     def __init__(self, name):
@@ -77,15 +78,15 @@ class WindowClass(WndProc):
         self.wnd_proc_closure = win32.WNDPROC(self.wnd_proc)
 
         class_info = win32.WNDCLASSEX()
-        class_info.cbSize = sizeof(class_info)
-        class_info.lpszClassName = name
-        class_info.lpfnWndProc = self.wnd_proc_closure
-        class_info.hInstance = current_process_module()
+        class_info.size = sizeof(class_info)
+        class_info.class_name = name
+        class_info.wnd_proc = self.wnd_proc_closure
+        class_info.instance = current_process_module()
         win32.RegisterClassEx(byref(class_info))
 
-    def wnd_proc(self, window_handle, message_id, wParam, lParam):
-        if message_id == win32.WM_NCCREATE and lParam:
-            creation_struct = cast(lParam, POINTER(win32.CREATESTRUCT))[0]
+    def wnd_proc(self, window_handle, message_id, w_param, l_param):
+        if message_id == win32.WM_NCCREATE and l_param:
+            creation_struct = cast(l_param, POINTER(win32.CREATESTRUCT))[0]
             actual_wnd_proc = cast(
                 creation_struct.lpCreateParams, win32.WNDPROC)
             win32.SetWindowLongPtr(
@@ -96,10 +97,10 @@ class WindowClass(WndProc):
             actual_wnd_proc = cast(win32.GetWindowLongPtr(
                 window_handle, win32.GWLP_USERDATA), win32.WNDPROC)
 
-        if not actual_wnd_proc: 
+        if not actual_wnd_proc:
             actual_wnd_proc = super().wnd_proc
 
-        return actual_wnd_proc(window_handle, message_id, wParam, lParam)
+        return actual_wnd_proc(window_handle, message_id, w_param, l_param)
 
 
 def create_window(wnd_proc, ex_style, style, window_name=None, x=0, y=0,
@@ -145,7 +146,7 @@ class RunLoop:
                     continue
 
                 if message.message == win32.WM_QUIT:
-                    return message.wParam
+                    return message.w_param
                 else:
                     win32.TranslateMessage(byref(message))
                     win32.DispatchMessage(byref(message))

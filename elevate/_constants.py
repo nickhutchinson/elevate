@@ -113,7 +113,7 @@ PM_NOYIELD = 0x0002
 
 """
 Sent prior to the WM_CREATE message when a window is first created.
-lParam: A pointer to the CREATESTRUCT
+l_param: A pointer to the CREATESTRUCT
 """
 WM_NCCREATE = 0x0081
 

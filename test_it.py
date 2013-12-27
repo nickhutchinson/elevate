@@ -76,9 +76,9 @@ def main():
 
     if utilities.is_elevated():
         class WndProc(utilities.WndProc):
-            def wnd_proc(self, window_handle, message_id, wParam, lParam):
-                return super().wnd_proc(window_handle, message_id, wParam,
-                                        lParam)
+            def wnd_proc(self, window_handle, message_id, w_param, l_param):
+                return super().wnd_proc(window_handle, message_id, w_param,
+                                        l_param)
 
         window = utilities.create_window(WndProc(), 0x00040000, 0x10000000,
                                          "Foobar")
@@ -95,22 +95,22 @@ def main():
     else:
         # console subsystem
         exec_info = win32.SHELLEXECUTEINFO()
-        exec_info.cbSize = ctypes.sizeof(exec_info)
-        exec_info.lpFile = pythonw_interpreter()
-        exec_info.lpParameters = utilities.argv_to_command_line([whereami()])
-        exec_info.lpVerb = "runas"
-        exec_info.fMask = (win32.SEE_MASK_FLAG_NO_UI
-                           | win32.SEE_MASK_NOASYNC
-                           | win32.SEE_MASK_NOCLOSEPROCESS
-                           | win32.SEE_MASK_UNICODE)
-        exec_info.nShow = win32.SW_SHOWNORMAL
+        exec_info.size = ctypes.sizeof(exec_info)
+        exec_info.file = pythonw_interpreter()
+        exec_info.parameters = utilities.argv_to_command_line([whereami()])
+        exec_info.verb = "runas"
+        exec_info.mask = (win32.SEE_MASK_FLAG_NO_UI
+                          | win32.SEE_MASK_NOASYNC
+                          | win32.SEE_MASK_NOCLOSEPROCESS
+                          | win32.SEE_MASK_UNICODE)
+        exec_info.show = win32.SW_SHOWNORMAL
 
         win32.ShellExecuteEx(ctypes.byref(exec_info))
-        win32.WaitForSingleObject(exec_info.hProcess, win32.INFINITE)
-        win32.CloseHandle(exec_info.hProcess)
+        win32.WaitForSingleObject(exec_info.process, win32.INFINITE)
+        win32.CloseHandle(exec_info.process)
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        win32.MessageBox(lpText="{}".format(traceback.format_exc()))
+        win32.MessageBox(text="{}".format(traceback.format_exc()))
