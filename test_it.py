@@ -73,24 +73,22 @@ def connect_to_parent_console():
 
 
 def main():
-    # class Wproc(utilities.WndProc):
-    #     def wnd_proc(self, window_handle, message_id, wParam, lParam):
-    #         print(window_handle, message_id, wParam, lParam)
-    #         return super().wnd_proc(window_handle, message_id, wParam, lParam)
-
-    # window = utilities.create_window(Wproc(), 0x00040000, 0x10000000,
-    #                                  b"Foobar")
-    # assert window
 
     if utilities.is_elevated():
+        class WndProc(utilities.WndProc):
+            def wnd_proc(self, window_handle, message_id, wParam, lParam):
+                return super().wnd_proc(window_handle, message_id, wParam,
+                                        lParam)
+
+        window = utilities.create_window(WndProc(), 0x00040000, 0x10000000,
+                                         "Foobar")
+        assert window
         print("before")
         # windowed subsystem
         connect_to_parent_console()
         print("printafter\n")
         write_console("writeconsoleafer\n")
 
-
-        
         libc.printf("printf after\n")
         utilities.RunLoop().run()
 
@@ -112,7 +110,7 @@ def main():
         win32.CloseHandle(exec_info.hProcess)
 
 if __name__ == '__main__':
-    # try:
-    main()
-    # except Exception as e:
-        # win32.MessageBox(lpText="{}".format(traceback.format_exc()))
+    try:
+        main()
+    except Exception as e:
+        win32.MessageBox(lpText="{}".format(traceback.format_exc()))

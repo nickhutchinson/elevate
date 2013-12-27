@@ -4,6 +4,7 @@ import weakref
 from ctypes import byref, cast, sizeof, POINTER
 from . import win32
 
+
 def is_elevated():
     admin_sid = None
     try:
@@ -17,6 +18,7 @@ def is_elevated():
         if admin_sid:
             win32.FreeSid(admin_sid)
 
+
 def argv_to_command_line(args):
     def escape_arg(arg):
         import re
@@ -26,11 +28,13 @@ def argv_to_command_line(args):
 
     return ' '.join(escape_arg(arg) for arg in args)
 
+
 def module_from_address(address):
     return win32.GetModuleHandleEx(
         win32.GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
         | win32.GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         cast(address, ctypes.c_wchar_p))
+
 
 def current_process_module():
     return win32.GetModuleHandleEx(
@@ -46,12 +50,12 @@ class WndProc(metaclass=abc.ABCMeta):
         """Process Window messages; return type depends on the message kind.
 
         Default implementation calls DefWindowProc()
-
         """
         return win32.DefWindowProc(window_handle, message_id, wParam, lParam)
 
 
 _refdata = weakref.WeakKeyDictionary()
+
 
 def _add_refdata_for_item(item, data):
     _refdata.setdefault(item, []).append(data)
@@ -68,7 +72,6 @@ class WindowClass(WndProc):
                 'me.nickhutchinson.elevate.wnd_class')        
             return klass._shared_instance
 
-
     def __init__(self, name):
         self.name = name
         self.wnd_proc_closure = win32.WNDPROC(self.wnd_proc)
@@ -80,13 +83,14 @@ class WindowClass(WndProc):
         class_info.hInstance = current_process_module()
         win32.RegisterClassEx(byref(class_info))
 
-
     def wnd_proc(self, window_handle, message_id, wParam, lParam):
         if message_id == win32.WM_NCCREATE and lParam:
             creation_struct = cast(lParam, POINTER(win32.CREATESTRUCT))[0]
-            actual_wnd_proc = \
-                cast(creation_struct.lpCreateParams, win32.WNDPROC)
-            win32.SetWindowLongPtr(window_handle, win32.GWLP_USERDATA,
+            actual_wnd_proc = cast(
+                creation_struct.lpCreateParams, win32.WNDPROC)
+            win32.SetWindowLongPtr(
+                window_handle,
+                win32.GWLP_USERDATA,
                 cast(actual_wnd_proc, ctypes.c_void_p).value)
         else:
             actual_wnd_proc = cast(win32.GetWindowLongPtr(
@@ -102,16 +106,16 @@ def create_window(wnd_proc, ex_style, style, window_name=None, x=0, y=0,
                   width=100, height=100, parent=None, menu=None):
     wnd_proc_closure = win32.WNDPROC(wnd_proc.wnd_proc)
 
-    class WrappedRestype(win32.CreateWindowEx.restype):
-        def __hash__(self): return id(self)
+    class HashableRestype(win32.CreateWindowEx.restype):
+        def __hash__(self):
+            return id(self)
 
-    wnd = WrappedRestype(win32.CreateWindowEx(ex_style,
-                         WindowClass.shared_instance().name,
-                         window_name, style, x, y, width, height, parent, menu,
-                         current_process_module(), wnd_proc_closure))
+    wnd = HashableRestype(win32.CreateWindowEx(ex_style,
+                          WindowClass.shared_instance().name,
+                          window_name, style, x, y, width, height, parent,
+                          menu, current_process_module(), wnd_proc_closure))
     _add_refdata_for_item(wnd, wnd_proc_closure)
     return wnd
-
 
 
 class RunLoop:
