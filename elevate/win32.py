@@ -1,9 +1,113 @@
 import ctypes
 from ctypes import POINTER, c_int
-from ctypes.wintypes import (DWORD, LPVOID, LPWSTR, BOOL, WORD, LPBYTE, HANDLE,
-                             ULONG, HWND, LPCWSTR, HINSTANCE, HKEY, BYTE)
+from ctypes.wintypes import *
 from .ctypes_utils import Win32Func, INPUT_PARAM, OUTPUT_PARAM
+from .libc import c_intptr
+from ._constants import *
 
+HCURSOR = HICON
+LRESULT = c_intptr
+LONG_PTR = c_intptr
+
+###############################################################################
+# Window functions
+###############################################################################
+
+WNDPROC = ctypes.WINFUNCTYPE(LRESULT, HWND, UINT, WPARAM, LPARAM)
+
+class WNDCLASSEX(ctypes.Structure):
+    _fields_ = (
+        ('cbSize', UINT),
+        ('style', UINT),
+        ('lpfnWndProc', WNDPROC),
+        ('cbClsExtra', c_int),
+        ('cbWndExtra', c_int),
+        ('hInstance', HINSTANCE),
+        ('hIcon', HICON),
+        ('hCursor', HCURSOR),
+        ('hbrBackground', HBRUSH),
+        ('lpszMenuName', LPCWSTR),
+        ('lpszClassName', LPCWSTR),
+        ('hIconSm', HICON),
+    )
+
+RegisterClassEx = Win32Func('RegisterClassExW', 'user32', ATOM,
+                            [POINTER(WNDCLASSEX)], lambda atom, *_: atom)
+
+GetWindowLongPtr = Win32Func('GetWindowLongPtrW', 'user32', LONG_PTR,
+    [(HWND, INPUT_PARAM, 'hWnd'),
+     (c_int, INPUT_PARAM, 'nIndex')])
+
+SetWindowLongPtr = Win32Func('SetWindowLongPtrW', 'user32', LONG_PTR,
+    [(HWND, INPUT_PARAM, 'hWnd'),
+     (c_int, INPUT_PARAM, 'nIndex'),
+     (LONG_PTR, INPUT_PARAM, 'dwNewLong')])
+
+class CREATESTRUCT(ctypes.Structure):
+    _fields_ = (
+        ('lpCreateParams', LPVOID),
+        ('hInstance', HINSTANCE),
+        ('hMenu', HMENU),
+        ('hwndParent', HWND),
+        ('cy', c_int),
+        ('cx', c_int),
+        ('y', c_int),
+        ('x', c_int),
+        ('style', LONG),
+        ('lpszName', LPCWSTR),
+        ('lpszClass', LPCWSTR),
+        ('dwExStyle', DWORD))
+
+CreateWindowEx = Win32Func(
+    'CreateWindowExW', 'user32', HWND,
+    [(DWORD, INPUT_PARAM, 'dwExStyle'),
+     (LPCWSTR, INPUT_PARAM, 'lpClassName'),
+     (LPCWSTR, INPUT_PARAM, 'lpWindowName', None),
+     (DWORD, INPUT_PARAM, 'dwStyle'),
+     (c_int, INPUT_PARAM, 'x', 0),
+     (c_int, INPUT_PARAM, 'y', 0),
+     (c_int, INPUT_PARAM, 'nWidth', 0),
+     (c_int, INPUT_PARAM, 'nHeight', 0),
+     (HWND, INPUT_PARAM, 'hWndParent', None),
+     (HMENU, INPUT_PARAM, 'hMenu', None),
+     (HINSTANCE, INPUT_PARAM, 'hInstance'),
+     (LPVOID, INPUT_PARAM, 'lpParam')])
+
+DefWindowProc = Win32Func('DefWindowProcW', 'user32', LRESULT,
+  [(HWND, INPUT_PARAM, 'hWnd'),
+   (UINT, INPUT_PARAM, 'Msg'),
+   (WPARAM, INPUT_PARAM, 'wParam'),
+   (LPARAM, INPUT_PARAM, 'lParam')])
+
+PeekMessage = Win32Func('PeekMessageW', 'user32', BOOL,
+  [(POINTER(MSG), INPUT_PARAM, 'lpMsg'),
+   (HWND, INPUT_PARAM, 'hWnd', None),
+   (UINT, INPUT_PARAM, 'wMsgFilterMin', 0),
+   (UINT, INPUT_PARAM, 'wMsgFilterMax', 0),
+   (UINT, INPUT_PARAM, 'wRemoveMsg', PM_REMOVE)],
+   success_predicate=None)
+
+TranslateMessage = Win32Func('TranslateMessage', 'user32',
+                             BOOL, [POINTER(MSG)], success_predicate=None)
+
+DispatchMessage = Win32Func('DispatchMessageW', 'user32',
+                            LRESULT, [POINTER(MSG)], success_predicate=None)
+
+###############################################################################
+
+DuplicateHandle = Win32Func(
+    'DuplicateHandle', 'kernel32', BOOL,
+    [(HANDLE, INPUT_PARAM, 'hSourceProcessHandle'),
+     (HANDLE, INPUT_PARAM, 'hSourceHandle'),
+     (HANDLE, INPUT_PARAM, 'hTargetProcessHandle'),
+     (POINTER(HANDLE), OUTPUT_PARAM, 'lpTargetHandle'),
+     (DWORD, INPUT_PARAM, 'dwDesiredAccess', 0),
+     (BOOL, INPUT_PARAM, 'bInheritHandle', False),
+     (DWORD, INPUT_PARAM, 'dwOptions', DUPLICATE_SAME_ACCESS)])
+
+CloseHandle = Win32Func('CloseHandle', 'kernel32', BOOL, [HANDLE])
+
+###############################################################################
 
 class SECURITY_ATTRIBUTES(ctypes.Structure):
     _fields_ = (
@@ -12,6 +116,51 @@ class SECURITY_ATTRIBUTES(ctypes.Structure):
         ('bInheritHandle', BOOL)
     )
 
+class SID(ctypes.Structure):
+    pass
+
+AllocateAndInitializeSid = Win32Func(
+    'AllocateAndInitializeSid', 'advapi32', BOOL,
+    [(POINTER(SID_IDENTIFIER_AUTHORITY), INPUT_PARAM, 'pIdentifierAuthority'),
+     (BYTE, INPUT_PARAM, 'nSubAuthorityCount', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority0', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority1', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority2', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority3', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority4', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority5', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority6', 0),
+     (DWORD, INPUT_PARAM, 'dwSubAuthority7', 0),
+     (POINTER(POINTER(SID)), OUTPUT_PARAM, 'pSid')])
+
+FreeSid = Win32Func('FreeSid', 'advapi32', POINTER(SID), [POINTER(SID)])
+
+CheckTokenMembership = Win32Func(
+    'CheckTokenMembership', 'advapi32', BOOL,
+    [(HANDLE, INPUT_PARAM, 'TokenHandle', None),
+     (POINTER(SID), INPUT_PARAM, 'SidToCheck'),
+     (POINTER(BOOL), OUTPUT_PARAM, 'IsMember')])
+
+###############################################################################
+
+SetStdHandle = Win32Func('SetStdHandle', 'kernel32', BOOL, [DWORD, HANDLE])
+
+GetStdHandle = Win32Func('GetStdHandle', 'kernel32', HANDLE, [DWORD],
+                         lambda h, *_: h and h != INVALID_HANDLE_VALUE)
+
+AttachConsole = Win32Func('AttachConsole', 'kernel32', BOOL,
+                          [(DWORD, INPUT_PARAM, 'dwProcessId')])
+
+WriteConsole = Win32Func(
+    'WriteConsoleW', 'kernel32', BOOL,
+    [(HANDLE, INPUT_PARAM, 'hConsoleOutput'),
+     (LPCWSTR, INPUT_PARAM, 'lpBuffer'),
+     (DWORD, INPUT_PARAM, 'nNumberOfCharsToWrite'),
+     (POINTER(DWORD), OUTPUT_PARAM, 'lpNumberOfCharsWritten'),
+     (LPVOID, INPUT_PARAM, 'lpReserved', None)])
+
+###############################################################################
+# Process management
 
 class STARTUPINFO(ctypes.Structure):
     _fields_ = (
@@ -72,53 +221,6 @@ class SHELLEXECUTEINFO(ctypes.Structure):
         ('hProcess', HANDLE)
     )
 
-
-class SID_IDENTIFIER_AUTHORITY(ctypes.Structure):
-    _fields_ = (('Value', BYTE * 6), )
-
-
-class SID(ctypes.Structure):
-    pass
-
-ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
-                           [POINTER(SHELLEXECUTEINFO)])
-
-CloseHandle = Win32Func('CloseHandle', 'kernel32', BOOL, [HANDLE])
-
-WaitForSingleObject = Win32Func(
-    'WaitForSingleObject', 'kernel32', DWORD, [HANDLE, DWORD],
-    lambda result, *_: result != WAIT_FAILED)
-
-AllocateAndInitializeSid = Win32Func(
-    'AllocateAndInitializeSid', 'advapi32', BOOL,
-    [(POINTER(SID_IDENTIFIER_AUTHORITY), INPUT_PARAM, 'pIdentifierAuthority'),
-     (BYTE, INPUT_PARAM, 'nSubAuthorityCount', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority0', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority1', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority2', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority3', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority4', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority5', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority6', 0),
-     (DWORD, INPUT_PARAM, 'dwSubAuthority7', 0),
-     (POINTER(POINTER(SID)), OUTPUT_PARAM, 'pSid')])
-
-FreeSid = Win32Func('FreeSid', 'advapi32', POINTER(SID), [POINTER(SID)])
-
-CheckTokenMembership = Win32Func(
-    'CheckTokenMembership', 'advapi32', BOOL,
-    [(HANDLE, INPUT_PARAM, 'TokenHandle', None),
-     (POINTER(SID), INPUT_PARAM, 'SidToCheck'),
-     (POINTER(BOOL), OUTPUT_PARAM, 'IsMember')])
-
-SetStdHandle = Win32Func('SetStdHandle', 'kernel32', BOOL, [DWORD, HANDLE])
-
-GetStdHandle = Win32Func('GetStdHandle', 'kernel32', HANDLE, [DWORD],
-                         lambda h, *_: h and h != INVALID_HANDLE_VALUE)
-
-AttachConsole = Win32Func('AttachConsole', 'kernel32', BOOL,
-                          [(DWORD, INPUT_PARAM, 'dwProcessId')])
-
 CreateProcess = Win32Func(
     'CreateProcessW', 'kernel32', BOOL,
     [(LPCWSTR, INPUT_PARAM, 'lpApplicationName'),
@@ -132,25 +234,19 @@ CreateProcess = Win32Func(
      (POINTER(STARTUPINFO), INPUT_PARAM, 'lpStartupInfo'),
      (POINTER(PROCESS_INFORMATION), OUTPUT_PARAM, 'lpProcessInformation')])
 
-DuplicateHandle = Win32Func(
-    'DuplicateHandle', 'kernel32', BOOL,
-    [(HANDLE, INPUT_PARAM, 'hSourceProcessHandle'),
-     (HANDLE, INPUT_PARAM, 'hSourceHandle'),
-     (HANDLE, INPUT_PARAM, 'hTargetProcessHandle'),
-     (POINTER(HANDLE), OUTPUT_PARAM, 'lpTargetHandle'),
-     (DWORD, INPUT_PARAM, 'dwDesiredAccess'),
-     (BOOL, INPUT_PARAM, 'bInheritHandle'),
-     (DWORD, INPUT_PARAM, 'dwOptions')])
+ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
+                           [POINTER(SHELLEXECUTEINFO)])
 
 GetCurrentProcess = Win32Func('GetCurrentProcess', 'kernel32', HANDLE, [])
 
-WriteConsole = Win32Func(
-    'WriteConsoleW', 'kernel32', BOOL,
-    [(HANDLE, INPUT_PARAM, 'hConsoleOutput'),
-     (LPCWSTR, INPUT_PARAM, 'lpBuffer'),
-     (DWORD, INPUT_PARAM, 'nNumberOfCharsToWrite'),
-     (POINTER(DWORD), OUTPUT_PARAM, 'lpNumberOfCharsWritten'),
-     (LPVOID, INPUT_PARAM, 'lpReserved', None)])
+GetModuleHandleEx = Win32Func(
+    'GetModuleHandleExW', 'kernel32', BOOL,
+    [(DWORD, INPUT_PARAM, 'dwFlags'),
+     (ctypes.c_wchar_p, INPUT_PARAM, 'lpModuleName'),
+     (POINTER(HMODULE), OUTPUT_PARAM, 'phModule')])
+
+###############################################################################
+
 
 MsgWaitForMultipleObjectsEx = Win32Func(
     'MsgWaitForMultipleObjectsEx', 'user32', DWORD,
@@ -160,95 +256,13 @@ MsgWaitForMultipleObjectsEx = Win32Func(
      (DWORD, INPUT_PARAM, 'dwWakeMask'),
      (DWORD, INPUT_PARAM, 'dwFlags')])
 
-#
-# ShellExecuteEx()
-SEE_MASK_DEFAULT = 0x00000000
-SEE_MASK_CLASSNAME = 0x00000001
-SEE_MASK_CLASSKEY = 0x00000003
-SEE_MASK_IDLIST = 0x00000004
-SEE_MASK_INVOKEIDLIST = 0x0000000C
-SEE_MASK_ICON = 0x00000010
-SEE_MASK_HOTKEY = 0x00000020
-SEE_MASK_NOCLOSEPROCESS = 0x00000040
-SEE_MASK_CONNECTNETDRV = 0x00000080
-SEE_MASK_NOASYNC = 0x00000100
-SEE_MASK_FLAG_DDEWAIT = 0x00000100
-SEE_MASK_DOENVSUBST = 0x00000200
-SEE_MASK_FLAG_NO_UI = 0x00000400
-SEE_MASK_UNICODE = 0x00004000
-SEE_MASK_NO_CONSOLE = 0x00008000
-SEE_MASK_ASYNCOK = 0x00100000
-SEE_MASK_NOQUERYCLASSSTORE = 0x01000000
-SEE_MASK_HMONITOR = 0x00200000
-SEE_MASK_NOZONECHECKS = 0x00800000
-SEE_MASK_WAITFORINPUTIDLE = 0x02000000
+WaitForSingleObject = Win32Func(
+    'WaitForSingleObject', 'kernel32', DWORD, [HANDLE, DWORD],
+    lambda result, *_: result != WAIT_FAILED)
 
-SW_HIDE = 0
-SW_MAXIMIZE = 3
-SW_MINIMIZE = 6
-SW_RESTORE = 9
-SW_SHOW = 5
-SW_SHOWDEFAULT = 10
-SW_SHOWMAXIMIZED = 3
-SW_SHOWMINIMIZED = 2
-SW_SHOWMINNOACTIVE = 7
-SW_SHOWNA = 8
-SW_SHOWNOACTIVATE = 4
-SW_SHOWNORMAL = 1
-#
-# GetStdHandle()
-STD_INPUT_HANDLE = -10
-STD_OUTPUT_HANDLE = -11
-STD_ERROR_HANDLE = -12
-
-INVALID_HANDLE_VALUE = -1
-
-# AttachConsole()
-ATTACH_PARENT_PROCESS = -1
-ERROR_ACCESS_DENIED = 5
-
-# Timeouts
-INFINITE = 0xFFFFFFFF
-
-# DuplicateHandle()
-DUPLICATE_CLOSE_SOURCE = 0x00000001
-DUPLICATE_SAME_ACCESS = 0x00000002
-
-# Sids, impersonation tokens, yadda yadda yadda
-SECURITY_BUILTIN_DOMAIN_RID = 0x00000020
-SECURITY_NT_AUTHORITY = SID_IDENTIFIER_AUTHORITY((0, 0, 0, 0, 0, 5))
-
-DOMAIN_ALIAS_RID_ADMINS = 0x00000220
-DOMAIN_ALIAS_RID_USERS = 0x00000221
-DOMAIN_ALIAS_RID_GUESTS = 0x00000222
-DOMAIN_ALIAS_RID_POWER_USERS = 0x00000223
-
-
-#
-# WaitForMultipleObjectsEx() and friends
-
-QS_ALLEVENTS = 0x04BF
-QS_ALLINPUT = 0x04FF
-QS_ALLPOSTMESSAGE = 0x0100
-QS_HOTKEY = 0x0080
-QS_INPUT = 0x407
-QS_KEY = 0x0001
-QS_MOUSE = 0x0006
-QS_MOUSEBUTTON = 0x0004
-QS_MOUSEMOVE = 0x0002
-QS_PAINT = 0x0020
-QS_POSTMESSAGE = 0x0008
-QS_RAWINPUT = 0x0400
-QS_SENDMESSAGE = 0x0040
-QS_TIMER = 0x0010
-
-MWMO_ALERTABLE = 0x0002
-MWMO_INPUTAVAILABLE = 0x0004
-MWMO_WAITALL = 0x0001
-
-WAIT_ABANDONED = 0x00000080
-WAIT_ABANDONED_0 = 0x00000080
-WAIT_FAILED = 0xFFFFFFFF
-WAIT_IO_COMPLETION = 0x000000C0
-WAIT_OBJECT_0 = 0x00000000
-WAIT_TIMEOUT = 0x00000102
+MessageBox = Win32Func(
+    'MessageBoxW', 'user32', c_int,
+    [(HWND, INPUT_PARAM,  'hWnd', None),
+     (LPCWSTR, INPUT_PARAM, 'lpText'),
+     (LPCWSTR, INPUT_PARAM, 'lpCaption', None),
+     (UINT, INPUT_PARAM, 'uType', 0)])

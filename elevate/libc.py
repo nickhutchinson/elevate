@@ -1,6 +1,12 @@
+"""A few useful functions from MSVCRT."""
 import ctypes
 from ctypes import POINTER, c_int, c_wchar_p, c_char_p, c_size_t
 from .ctypes_utils import CFunc
+
+if ctypes.sizeof(ctypes.c_voidp) == 8:
+    c_uintptr, c_intptr = ctypes.c_uint64, ctypes.c_int64
+else:
+    c_uintptr, c_intptr = ctypes.c_uint32, ctypes.c_int32
 
 class FILE(ctypes.Structure):
     _fields_ = (
