@@ -48,8 +48,6 @@ def connect_to_parent_console():
         StandardHandleInfo(
             'stderr', 'CONOUT$', win32.STD_ERROR_HANDLE, 2, 'w'))
 
-    c_standard_streams = libc.get_std_streams()
-
     for handle_info in standard_handles:
         stream = getattr(sys, handle_info.name)
         if stream:
@@ -69,7 +67,7 @@ def connect_to_parent_console():
 
         # associate C's (stdin|stdout|stderr) with the console
         libc.freopen(handle_info.filename, handle_info.mode,
-                     c_standard_streams[handle_info.fd])
+                     getattr(libc, handle_info.name))
 
 
 def main():

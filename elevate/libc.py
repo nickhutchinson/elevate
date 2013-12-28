@@ -25,8 +25,14 @@ freopen = CFunc('_wfreopen', 'msvcrt',
 fileno = CFunc('_fileno', 'msvcrt', POINTER(FILE), (c_int,))
 printf = CFunc('wprintf', 'msvcrt', c_int, (c_wchar_p,))
 
-get_std_streams = CFunc('__iob_func', 'msvcrt', POINTER(FILE), [])
 wcslen = CFunc('wcslen', 'msvcrt', c_size_t, [c_wchar_p])
+
+_get_std_streams = CFunc('__iob_func', 'msvcrt', POINTER(FILE), [])
+_std_streams = _get_std_streams()
+
+stdin=_std_streams[0]
+stdout=_std_streams[1]
+stderr=_std_streams[2]
 
 from msvcrt import open_osfhandle, get_osfhandle
 from os import dup2, close, fdopen, O_TEXT, O_BINARY
