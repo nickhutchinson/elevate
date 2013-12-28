@@ -9,6 +9,9 @@ HCURSOR = HICON
 LRESULT = c_intptr
 LONG_PTR = c_intptr
 
+def _is_valid_handle(h, *args):
+    return h and h != INVALID_HANDLE_VALUE
+
 ###############################################################################
 # Window functions
 
@@ -74,7 +77,8 @@ CreateWindowEx = Win32Func(
      ('wnd_parent', HWND, None),
      ('menu', HMENU, None),
      ('instance', HINSTANCE),
-     ('param', LPVOID)])
+     ('param', LPVOID)],
+    success_predicate=_is_valid_handle)
 
 DefWindowProc = Win32Func(
     'DefWindowProcW', 'user32', LRESULT,
@@ -153,7 +157,7 @@ CheckTokenMembership = Win32Func(
 SetStdHandle = Win32Func('SetStdHandle', 'kernel32', BOOL, [DWORD, HANDLE])
 
 GetStdHandle = Win32Func('GetStdHandle', 'kernel32', HANDLE, [DWORD],
-                         lambda h, *_: h and h != INVALID_HANDLE_VALUE)
+                         _is_valid_handle)
 
 AttachConsole = Win32Func('AttachConsole', 'kernel32', BOOL,
                           [('process_id', DWORD)])

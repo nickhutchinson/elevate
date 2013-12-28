@@ -103,8 +103,10 @@ class WindowClass(WndProc):
         return actual_wnd_proc(window_handle, message_id, w_param, l_param)
 
 
-def create_window(wnd_proc, ex_style, style, window_name=None, x=0, y=0,
-                  width=100, height=100, parent=None, menu=None):
+def create_window(wnd_proc, ex_style, style, window_name="Untitled window",
+                  x=win32.CW_USEDEFAULT, y=win32.CW_USEDEFAULT,
+                  width=win32.CW_USEDEFAULT, height=win32.CW_USEDEFAULT,
+                  parent=None, menu=None):
     wnd_proc_closure = win32.WNDPROC(wnd_proc.wnd_proc)
 
     class HashableRestype(win32.CreateWindowEx.restype):

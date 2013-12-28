@@ -78,17 +78,16 @@ def main():
                 return super().wnd_proc(window_handle, message_id, w_param,
                                         l_param)
 
-        window = utilities.create_window(WndProc(), 0x00040000, 0x10000000,
-                                         "Foobar")
-        assert window
+        window = utilities.create_window(WndProc(), win32.WS_EX_APPWINDOW,
+                                         win32.WS_VISIBLE, "Foobar")
         print("before")
         # windowed subsystem
         connect_to_parent_console()
         print("printafter\n")
         write_console("writeconsoleafer\n")
-
         libc.printf("printf after\n")
         utilities.RunLoop().run()
+        assert window
 
     else:
         # console subsystem
