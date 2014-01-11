@@ -80,6 +80,8 @@ class WindowClass(WndProc):
         class_info = win32.WNDCLASSEX()
         class_info.size = sizeof(class_info)
         class_info.class_name = name
+        class_info.cursor = win32.LoadCursor(None, win32.IDC_ARROW)
+        class_info.background  = win32.COLOR_WINDOW
         class_info.wnd_proc = self.wnd_proc_closure
         class_info.instance = current_process_module()
         win32.RegisterClassEx(byref(class_info))
