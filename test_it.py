@@ -41,12 +41,12 @@ def connect_to_parent_console():
     StandardHandleInfo = namedtuple('StandardHandleInfo',
                                     'name filename win32_constant fd mode')
     standard_handles = (
-        StandardHandleInfo(
-            'stdin', 'CONIN$', win32.STD_INPUT_HANDLE, 0, 'r'),
-        StandardHandleInfo(
-            'stdout', 'CONOUT$', win32.STD_OUTPUT_HANDLE, 1, 'w'),
-        StandardHandleInfo(
-            'stderr', 'CONOUT$', win32.STD_ERROR_HANDLE, 2, 'w'))
+        StandardHandleInfo('stdin', 'CONIN$', win32.STD_INPUT_HANDLE, 
+                           libc.STDIN_FILENO, 'r'),
+        StandardHandleInfo('stdout', 'CONOUT$', win32.STD_OUTPUT_HANDLE,
+                           libc.STDOUT_FILENO, 'w'),
+        StandardHandleInfo('stderr', 'CONOUT$', win32.STD_ERROR_HANDLE,
+                           libc.STDERR_FILENO, 'w'))
 
     for handle_info in standard_handles:
         stream = getattr(sys, handle_info.name)
@@ -78,8 +78,8 @@ def main():
                 return super().wnd_proc(window_handle, message_id, w_param,
                                         l_param)
 
-        window = utilities.create_window(WndProc(), win32.WS_EX_APPWINDOW,
-                                         win32.WS_VISIBLE, "Foobar")
+        window = utilities.create_window(WndProc(), win32.WS_EX_OVERLAPPEDWINDOW,
+                                         win32.WS_OVERLAPPEDWINDOW|win32.WS_VISIBLE, "Foobar")
         print("before")
         # windowed subsystem
         connect_to_parent_console()

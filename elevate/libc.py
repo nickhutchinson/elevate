@@ -1,4 +1,4 @@
-"""A few useful functions from MSVCRT."""
+"""A few useful functions from msvcrt."""
 import ctypes
 from ctypes import POINTER, c_int, c_wchar_p, c_char_p, c_size_t
 from .ctypes_utils import CFunc
@@ -30,9 +30,11 @@ wcslen = CFunc('wcslen', 'msvcrt', c_size_t, [c_wchar_p])
 _get_std_streams = CFunc('__iob_func', 'msvcrt', POINTER(FILE), [])
 _std_streams = _get_std_streams()
 
-stdin=_std_streams[0]
-stdout=_std_streams[1]
-stderr=_std_streams[2]
+STDIN_FILENO = 0
+STDOUT_FILENO = 1
+STDERR_FILENO = 2
+
+stdin, stdout, stderr = _std_streams[:3]
 
 from msvcrt import open_osfhandle, get_osfhandle
 from os import dup2, close, fdopen, O_TEXT, O_BINARY
