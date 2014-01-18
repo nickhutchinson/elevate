@@ -43,6 +43,27 @@ def current_process_module():
         win32.GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, None)
 
 
+def get_unc_name_for_path(path):
+    buf = None
+    buffer_size = win32.DWORD()
+
+    MAX_ATTEMPTS=5
+    for _ in range(MAX_ATTEMPTS):
+        try:
+            buf_ptr = ctypes.byref(buf) if buf else None
+            win32.WNetGetUniversalName(path, win32.UNIVERSAL_NAME_INFO_LEVEL, 
+                                       buf_ptr, ctypes.byref(buffer_size))
+            return win32.UNIVERSAL_NAME_INFO.from_buffer(buf).universal_name
+        except OSError as e:
+            if e.winerror == win32.ERROR_MORE_DATA:
+                buf = ctypes.c_buffer(buffer_size.value)
+            else:
+                raise
+
+    raise ctypes.WinError(win32.ERROR_MORE_DATA)
+
+
+
 class WndProc(metaclass=abc.ABCMeta):
 
     """Implement this interface to to customise window behaviour."""

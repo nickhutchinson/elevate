@@ -18,7 +18,14 @@ def pythonw_interpreter():
 
 
 def whereami():
-    return os.path.abspath(sys.argv[0])
+    absolute_script_path = os.path.abspath(sys.argv[0])
+    try:
+        return utilities.get_unc_name_for_path(absolute_script_path)
+    except OSError as e:
+        if e.winerror in (win32.ERROR_NOT_CONNECTED, win32.ERROR_BAD_DEVICE):
+            return absolute_script_path
+        else:
+            raise
 
 
 def write_console(s, console=win32.STD_OUTPUT_HANDLE):

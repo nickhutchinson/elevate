@@ -286,3 +286,25 @@ LoadCursor = Win32Func(
     [('instance', HINSTANCE),
      ('cursor_name', LPCWSTR)])
 
+
+class UNIVERSAL_NAME_INFO(ctypes.Structure):
+    _fields_ = (('universal_name', LPCWSTR),)
+
+
+UNIVERSAL_NAME_INFO_LEVEL = 0x00000001
+REMOTE_NAME_INFO_LEVEL = 0x00000002
+
+WNetGetUniversalName = Win32Func(
+   'WNetGetUniversalNameW', 'mpr.dll', DWORD,
+   [('local_path', LPCWSTR),
+    ('info_level', DWORD),
+    ('buffer', LPVOID),
+    ('buffer_size', LPDWORD)])
+
+def _wnet_get_universal_name_errcheck(result, func, args):
+    if result == NO_ERROR:
+        return args
+
+    raise ctypes.WinError(result)
+
+WNetGetUniversalName.errcheck = _wnet_get_universal_name_errcheck
