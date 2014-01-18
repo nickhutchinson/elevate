@@ -1,5 +1,6 @@
 import ctypes
 from ctypes.wintypes import BYTE, LPCWSTR
+from ._winerror import *
 
 # ShellExecuteEx()
 SEE_MASK_DEFAULT = 0x00000000
@@ -45,7 +46,6 @@ INVALID_HANDLE_VALUE = -1
 
 # AttachConsole()
 ATTACH_PARENT_PROCESS = -1
-ERROR_ACCESS_DENIED = 5
 
 # Timeouts
 INFINITE = 0xFFFFFFFF
