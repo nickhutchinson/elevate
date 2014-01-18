@@ -279,3 +279,10 @@ MessageBox = Win32Func(
      ('text', LPCWSTR),
      ('caption', LPCWSTR, None),
      ('type', UINT, 0)])
+
+
+LoadCursor = Win32Func(
+    'LoadCursorW', 'user32', HCURSOR,
+    [('instance', HINSTANCE),
+     ('cursor_name', LPCWSTR)])
+
