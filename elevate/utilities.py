@@ -90,7 +90,7 @@ class WindowClass(WndProc):
         if message_id == win32.WM_NCCREATE and l_param:
             creation_struct = cast(l_param, POINTER(win32.CREATESTRUCT))[0]
             actual_wnd_proc = cast(
-                creation_struct.lpCreateParams, win32.WNDPROC)
+                creation_struct.create_params, win32.WNDPROC)
             win32.SetWindowLongPtr(
                 window_handle,
                 win32.GWLP_USERDATA,
