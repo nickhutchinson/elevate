@@ -280,7 +280,6 @@ MessageBox = Win32Func(
      ('caption', LPCWSTR, None),
      ('type', UINT, 0)])
 
-
 LoadCursor = Win32Func(
     'LoadCursorW', 'user32', HCURSOR,
     [('instance', HINSTANCE),
@@ -295,7 +294,7 @@ UNIVERSAL_NAME_INFO_LEVEL = 0x00000001
 REMOTE_NAME_INFO_LEVEL = 0x00000002
 
 WNetGetUniversalName = Win32Func(
-   'WNetGetUniversalNameW', 'mpr.dll', DWORD,
+   'WNetGetUniversalNameW', 'mpr', DWORD,
    [('local_path', LPCWSTR),
     ('info_level', DWORD),
     ('buffer', LPVOID),
