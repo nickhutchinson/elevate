@@ -1,40 +1,36 @@
-"""
-Elevate
-
-Usage:
-  elevate.py [--] <command>...
-
-Options:
-  -h --help     Show this screen.
-
-"""
-
-from docopt import docopt
-import ctypes
-import traceback
-from collections import namedtuple
-import os
-import sys
-import shutil
-# import time
-
 from elevate import win32, libc, utilities
 
+from collections import namedtuple
+import argparse
+import ctypes
+import os
+import shutil
+import sys
+import tempfile
+import traceback
+import logging
 
-def python_interpreter():
+logging.basicConfig(filename='example.log',
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s:%(message)s')
+
+def python_interpreter_path():
     return sys.executable
 
 
-def pythonw_interpreter():
-    head, tail = os.path.split(python_interpreter())
+def pythonw_interpreter_path():
+    head, tail = os.path.split(python_interpreter_path())
     base, ext = os.path.splitext(tail)
     return os.path.join(head, 'pythonw' + ext)
 
 
-def whereami():
+def path_to_current_script():
     absolute_script_path = os.path.abspath(sys.argv[0])
+
+    # Handle case where we're on a mapped network drive. When we're relaunched
+    # as admin, drive mappings seem to be no longer there.
     try:
-        return utilities.get_unc_name_for_path(absolute_script_path)
+        return utilities.unc_name_for_path(absolute_script_path)
     except OSError as e:
         if e.winerror in (win32.ERROR_NOT_CONNECTED, win32.ERROR_BAD_DEVICE):
             return absolute_script_path
@@ -49,17 +45,19 @@ def write_console(s, console=win32.STD_OUTPUT_HANDLE):
 
 
 def print_console(*args):
-    write_console("%s\n" % args)
+    write_console('{}\n'.format(args))
 
 
-def connect_to_parent_console():
+def attach_to_parent_console():
     # FIXME:
-    # - mintty needs special handling (it uses pipes instead of
-    #   bona-finde console handles)
+    # Currently, redirection of the std streams doesn't work. We need to do
+    # more than just attach to our parent's console, as that process' std
+    # handles might be pipes and not be console handles at all. e.g. MinTTY.
 
     try:
         win32.AttachConsole(win32.ATTACH_PARENT_PROCESS)
     except OSError as e:
+        logging.debug("couldn't attach to parent {}".format(e))
         if e.winerror != win32.ERROR_ACCESS_DENIED:
             raise
 
@@ -94,69 +92,101 @@ def connect_to_parent_console():
         libc.freopen(handle_info.filename, handle_info.mode,
                      getattr(libc, handle_info.name))
 
-def do_create_process(argv):
+
+def spawn_user_process_sync(argv, environment):
     # FIXME: we need a win32 message pump to avoid the caller getting the 
     #        wait cursor.
-    # 
-    # class WndProc(utilities.WndProc):
-    #     def wnd_proc(self, window_handle, message_id, w_param, l_param):
-    #         return super().wnd_proc(window_handle, message_id, w_param,
-    #                                 l_param)
-    # window = utilities.create_window(WndProc(), win32.WS_EX_OVERLAPPEDWINDOW,
-    #                                  win32.WS_OVERLAPPEDWINDOW|win32.WS_VISIBLE, "Foobar")
 
     command_line = utilities.argv_to_command_line(argv)
     # MSDN says CreateProcess needs a mutable string, for whatever reason.
     command_line_mutable = ctypes.create_unicode_buffer(command_line)
 
-    # win32.MessageBox(text="{}".format([argv[0], command_line_mutable.value]))
-
-    # FIXME:
-    # - elevated process needs environment of actual caller. CWD too?
     startup_info = win32.STARTUPINFO()
     startup_info.cb = ctypes.sizeof(win32.STARTUPINFO)
 
-    proc_info = win32.CreateProcess(argv[0], command_line_mutable,
-        startup_info=startup_info)        
+    proc_info = win32.CreateProcess(argv[0],
+        command_line_mutable,
+        startup_info=startup_info,
+        environment=environment,
+        creation_flags=win32.CREATE_UNICODE_ENVIRONMENT)
+    
     win32.WaitForSingleObject(proc_info.process, win32.INFINITE)
     # FIXME exit code
     win32.CloseHandle(proc_info.process)
 
 
-def main():
-    # FIXME: docopt not flexible enough, back to argparse we go...
-    params = docopt(__doc__)
-    argv = params['<command>']
+def launch_privileged_helper_sync(argv):
+    resolved_path = shutil.which(argv[0])
+    if not resolved_path:
+        print('File '{}' was not found.'.format(argv[0]), file=sys.stderr)
+        sys.exit(1)
+    
+    environment_block = utilities.environment_block_snapshot()
 
-    if utilities.is_elevated():
+    with tempfile.NamedTemporaryFile() as env_file:
+        env_file.write(environment_block)
+        env_file.flush()
 
-        connect_to_parent_console()
-        do_create_process(argv)
-
-    else:
-        resolved_path = shutil.which(argv[0])
-        assert resolved_path
-
-        # console subsystem
         exec_info = win32.SHELLEXECUTEINFO()
         exec_info.size = ctypes.sizeof(exec_info)
-        exec_info.verb = "runas"
+        exec_info.verb = 'runas'
         exec_info.mask = (win32.SEE_MASK_FLAG_NO_UI
                           | win32.SEE_MASK_NOASYNC
                           | win32.SEE_MASK_NOCLOSEPROCESS
                           | win32.SEE_MASK_UNICODE)
         exec_info.show = win32.SW_SHOWNORMAL
-        exec_info.file = pythonw_interpreter()
-        exec_info.parameters = utilities.argv_to_command_line(
-            [whereami(), '--', resolved_path] + argv[1:])
+        exec_info.file = pythonw_interpreter_path()
+        exec_info.parameters = utilities.argv_to_command_line([
+            path_to_current_script(),
+            '--environment_block', env_file.name, '--',
+            resolved_path] + argv[1:])
 
-        win32.ShellExecuteEx(ctypes.byref(exec_info))
-        win32.WaitForSingleObject(exec_info.process, win32.INFINITE)
-        # FIXME exit code
-        win32.CloseHandle(exec_info.process)
+        try:
+            win32.ShellExecuteEx(ctypes.byref(exec_info))
+        except OSError as e:
+            if e.winerror == win32.ERROR_CANCELLED:
+                # User declined
+                sys.exit(1)
+            else:
+                raise
+        else:
+            win32.WaitForSingleObject(exec_info.process, win32.INFINITE)
+            # FIXME exit code
+            win32.CloseHandle(exec_info.process)
+
+
+def env_block_from_file(file_path):
+    if not file_path:
+        return None
+
+    def opener(name, flag):
+        return os.open(name, flag | os.O_TEMPORARY, 0o600)
+    
+    with open(file_path, 'rb', opener=opener) as f:
+        return f.read()
+
+
+def main():
+    parser = argparse.ArgumentParser(prog='elevate.py')
+    parser.add_argument('--environment_block', help=argparse.SUPPRESS)
+    parser.add_argument('--parent_process_handle', help=argparse.SUPPRESS)
+    parser.add_argument('command', help='the command to run')
+    parser.add_argument('args', nargs=argparse.REMAINDER,
+                        help=argparse.SUPPRESS)
+    
+    args = parser.parse_args()
+
+    if utilities.is_elevated():
+        attach_to_parent_console()
+        env = env_block_from_file(args.environment_block)
+        spawn_user_process_sync([args.command] + args.args, env)
+
+    else:
+        launch_privileged_helper_sync([args.command] + args.args)
+
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        win32.MessageBox(text="{}".format(traceback.format_exc()))
+        win32.MessageBox(text='{}'.format(traceback.format_exc()))

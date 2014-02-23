@@ -3,6 +3,7 @@ import ctypes
 import weakref
 from ctypes import byref, cast, sizeof, POINTER
 from . import win32
+from . import libc
 
 
 def is_elevated():
@@ -43,16 +44,16 @@ def current_process_module():
         win32.GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, None)
 
 
-def get_unc_name_for_path(path):
+def unc_name_for_path(path):
     buf = None
     buffer_size = win32.DWORD()
 
     MAX_ATTEMPTS=5
     for _ in range(MAX_ATTEMPTS):
         try:
-            buf_ptr = ctypes.byref(buf) if buf else None
+            buf_ptr = byref(buf) if buf else None
             win32.WNetGetUniversalName(path, win32.UNIVERSAL_NAME_INFO_LEVEL, 
-                                       buf_ptr, ctypes.byref(buffer_size))
+                                       buf_ptr, byref(buffer_size))
             return win32.UNIVERSAL_NAME_INFO.from_buffer(buf).universal_name
         except OSError as e:
             if e.winerror == win32.ERROR_MORE_DATA:
@@ -62,6 +63,29 @@ def get_unc_name_for_path(path):
 
     raise ctypes.WinError(win32.ERROR_MORE_DATA)
 
+
+def _length_of_environment_block(env_block):
+    """ Length of the environment block, in bytes """
+    # the envblock is terminated by a zero-length string
+    n = 0
+    while True:
+        current_length = libc.wcslen(byref(env_block.contents, n))
+        n += (current_length + 1) * sizeof(ctypes.c_wchar);
+
+        if current_length == 0:
+            break
+
+    return n
+
+
+def environment_block_snapshot():
+    env_block = win32.GetEnvironmentStrings()
+    try:
+        n = _length_of_environment_block(env_block)
+        return cast(env_block, POINTER(ctypes.c_char))[:n]
+
+    finally:
+        win32.FreeEnvironmentStrings(env_block)
 
 
 class WndProc(metaclass=abc.ABCMeta):

@@ -1,5 +1,5 @@
 import ctypes
-from ctypes import POINTER, c_int, c_wchar_p
+from ctypes import POINTER, c_int, c_wchar_p, c_wchar
 from ctypes.wintypes import *
 from .ctypes_utils import OUTPUT_PARAM, Win32Func
 from .libc import c_intptr
@@ -314,3 +314,9 @@ def _wnet_get_universal_name_errcheck(result, func, args):
     raise ctypes.WinError(result)
 
 WNetGetUniversalName.errcheck = _wnet_get_universal_name_errcheck
+
+GetEnvironmentStrings = Win32Func(
+    'GetEnvironmentStringsW', 'kernel32', POINTER(c_wchar), [])
+FreeEnvironmentStrings = Win32Func(
+    'FreeEnvironmentStringsW', 'kernel32', BOOL, [POINTER(c_wchar)])
+
