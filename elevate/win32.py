@@ -273,6 +273,13 @@ WaitForSingleObject = Win32Func(
     'WaitForSingleObject', 'kernel32', DWORD, [HANDLE, DWORD],
     lambda result, *_: result != WAIT_FAILED)
 
+PostMessage = Win32Func(
+    'PostMessageW', 'user32', BOOL,
+    [('hwnd', HWND),
+     ('msg', UINT),
+     ('w_param', WPARAM),
+     ('l_param', LPARAM)])
+
 MessageBox = Win32Func(
     'MessageBoxW', 'user32', c_int,
     [('wnd', HWND, None),
