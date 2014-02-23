@@ -240,7 +240,7 @@ CreateProcess = Win32Func(
      ('command_line', LPWSTR),
      ('process_attributes', POINTER(SECURITY_ATTRIBUTES), None),
      ('thread_attributes', POINTER(SECURITY_ATTRIBUTES), None),
-     ('inherit_handles', BOOL),
+     ('inherit_handles', BOOL, False),
      ('creation_flags', DWORD, 0),
      ('environment', LPVOID, None),
      ('current_directory', LPCWSTR, None),
