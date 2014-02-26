@@ -6,11 +6,11 @@ import ctypes
 import os
 import shutil
 import sys
-import tempfile
 import traceback
 import logging
+from multiprocessing.connection import Listener, Client
 
-logging.basicConfig(filename='example.log',
+logging.basicConfig(filename='elevate.log',
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s:%(message)s')
 
@@ -118,15 +118,11 @@ def spawn_user_process_sync(argv, environment):
 def launch_privileged_helper_sync(argv):
     resolved_path = shutil.which(argv[0])
     if not resolved_path:
-        print('File '{}' was not found.'.format(argv[0]), file=sys.stderr)
+        print("File '{}' was not found.".format(argv[0]), file=sys.stderr)
         sys.exit(1)
     
-    environment_block = utilities.environment_block_snapshot()
 
-    with tempfile.NamedTemporaryFile() as env_file:
-        env_file.write(environment_block)
-        env_file.flush()
-
+    with Listener() as server:
         exec_info = win32.SHELLEXECUTEINFO()
         exec_info.size = ctypes.sizeof(exec_info)
         exec_info.verb = 'runas'
@@ -138,7 +134,7 @@ def launch_privileged_helper_sync(argv):
         exec_info.file = pythonw_interpreter_path()
         exec_info.parameters = utilities.argv_to_command_line([
             path_to_current_script(),
-            '--environment_block', env_file.name, '--',
+            '--named_pipe', server.address, '--',
             resolved_path] + argv[1:])
 
         try:
@@ -149,27 +145,26 @@ def launch_privileged_helper_sync(argv):
                 sys.exit(1)
             else:
                 raise
-        else:
+                
+        with server.accept() as conn:
+            message = {
+                'environment_block': utilities.environment_block_snapshot()
+                # FIXME
+                # stdout, stderr, stdin handles
+                # pid
+            }
+            logging.debug("Sending message {}".format(message))
+            conn.send(message)
+            
             win32.WaitForSingleObject(exec_info.process, win32.INFINITE)
             # FIXME exit code
             win32.CloseHandle(exec_info.process)
 
 
-def env_block_from_file(file_path):
-    if not file_path:
-        return None
-
-    def opener(name, flag):
-        return os.open(name, flag | os.O_TEMPORARY, 0o600)
-    
-    with open(file_path, 'rb', opener=opener) as f:
-        return f.read()
-
-
 def main():
     parser = argparse.ArgumentParser(prog='elevate.py')
-    parser.add_argument('--environment_block', help=argparse.SUPPRESS)
-    parser.add_argument('--parent_process_handle', help=argparse.SUPPRESS)
+    parser.add_argument('--named_pipe', help=argparse.SUPPRESS)
+    parser.add_argument('--passkey', help=argparse.SUPPRESS)    
     parser.add_argument('command', help='the command to run')
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help=argparse.SUPPRESS)
@@ -178,7 +173,14 @@ def main():
 
     if utilities.is_elevated():
         attach_to_parent_console()
-        env = env_block_from_file(args.environment_block)
+        env = None
+
+        if args.named_pipe:
+            with Client(args.named_pipe) as conn:
+                message = conn.recv()
+                env = message['environment_block']
+
+        logging.debug("Received message {}".format(message))
         spawn_user_process_sync([args.command] + args.args, env)
 
     else:
