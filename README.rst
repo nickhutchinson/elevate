@@ -7,6 +7,10 @@ don't have admin rights. And yet there's no decent analogue to Unix's ``sudo``.
 
 So I'm writing one. In Python. It's *very* rough around the edges at the moment, however.
 
+Prerequisites
+-------------
+- Python 3.3
+
 Usage
 -----
 
