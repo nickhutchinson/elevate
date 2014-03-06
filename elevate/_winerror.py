@@ -26125,7 +26125,7 @@ SEVERITY_ERROR = 1
 # indicate success).
 #
 
-#define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
+# SUCCEEDED =  (((HRESULT)(hr)) >= 
 
 #
 # and the inverse
@@ -27023,8 +27023,8 @@ CO_E_PREMATURE_STUB_RUNDOWN = 0x80004035
 #
 # Success codes
 #
-#define S_OK                                   ((HRESULT)0L)
-#define S_FALSE                                ((HRESULT)1L)
+S_OK = 0
+S_FALSE = 1
 
 # ******************
 # FACILITY_ITF
@@ -27040,10 +27040,10 @@ CO_E_PREMATURE_STUB_RUNDOWN = 0x80004035
 # Generic OLE errors that may be returned by many inerfaces
 #
 
-#define OLE_E_FIRST ((HRESULT)0x80040000L)
-#define OLE_E_LAST  ((HRESULT)0x800400FFL)
-#define OLE_S_FIRST ((HRESULT)0x00040000L)
-#define OLE_S_LAST  ((HRESULT)0x000400FFL)
+OLE_E_FIRST = 0x80040000
+OLE_E_LAST = 0x800400FF
+OLE_S_FIRST = 0x00040000
+OLE_S_LAST = 0x000400FF
 
 #
 # Old OLE errors

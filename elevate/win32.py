@@ -1,9 +1,11 @@
 import ctypes
-from ctypes import POINTER, c_int, c_wchar_p, c_wchar
+from ctypes import POINTER, c_int, c_wchar_p, c_wchar, c_void_p, HRESULT
 from ctypes.wintypes import *
-from .ctypes_utils import OUTPUT_PARAM, Win32Func
+from .ctypes_utils import OUTPUT_PARAM, Win32Func, Win32OLEFunc
 from .libc import c_intptr
 from ._constants import *
+import sys
+from uuid import UUID
 
 HCURSOR = HICON
 LRESULT = c_intptr
@@ -11,6 +13,29 @@ LONG_PTR = c_intptr
 
 def _is_valid_handle(h, *args):
     return h and h != INVALID_HANDLE_VALUE
+
+# Fundamental Types
+
+class FILETIME(ctypes.Structure):
+    _fields_ = [('low_date_time', DWORD), ('high_date_time', DWORD)]
+
+    def __int__(self):
+        return (self.high_date_time << 32) | self.low_date_time
+
+
+class GUID(ctypes.Structure):
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], str):
+            super().__init__(**kwargs)
+            if sys.byteorder == 'big':
+                self.data[:] = UUID(args[0]).bytes
+            else:
+                self.data[:] = UUID(args[0]).bytes_le
+        else:
+            super().__init__(*args, **kwargs)
+
+
+    _fields_ = [('data', ctypes.c_ubyte * 16)]
 
 ###############################################################################
 # Window functions
@@ -250,13 +275,36 @@ CreateProcess = Win32Func(
 ShellExecuteEx = Win32Func('ShellExecuteExW', 'shell32', BOOL,
                            [POINTER(SHELLEXECUTEINFO)])
 
-GetCurrentProcess = Win32Func('GetCurrentProcess', 'kernel32', HANDLE, [])
-
 GetModuleHandleEx = Win32Func(
     'GetModuleHandleExW', 'kernel32', BOOL,
     [('flags', DWORD),
      ('module_name', c_wchar_p),
      ('module', POINTER(HMODULE), OUTPUT_PARAM)])
+
+
+GetEnvironmentStrings = Win32Func(
+    'GetEnvironmentStringsW', 'kernel32', POINTER(c_wchar), [])
+FreeEnvironmentStrings = Win32Func(
+    'FreeEnvironmentStringsW', 'kernel32', BOOL, [POINTER(c_wchar)])
+
+
+GetProcessTimes = Win32Func(
+    'GetProcessTimes', 'kernel32', BOOL,
+    [('process', HANDLE),
+     ('creation_time', POINTER(FILETIME), OUTPUT_PARAM),
+     ('exit_time', POINTER(FILETIME), OUTPUT_PARAM),
+     ('kernel_time', POINTER(FILETIME), OUTPUT_PARAM),
+     ('user_time', POINTER(FILETIME), OUTPUT_PARAM)])
+
+
+GetCurrentProcessId = Win32Func('GetCurrentProcessId', 'kernel32', DWORD, [])
+GetCurrentProcess = Win32Func('GetCurrentProcess', 'kernel32', HANDLE, [])
+
+OpenProcess = Win32Func(
+    'OpenProcess', 'kernel32', HANDLE,
+    [('desired_access', DWORD),
+     ('inherit_handle', BOOL),
+     ('process_id', DWORD)])
 
 ###############################################################################
 
@@ -315,8 +363,27 @@ def _wnet_get_universal_name_errcheck(result, func, args):
 
 WNetGetUniversalName.errcheck = _wnet_get_universal_name_errcheck
 
-GetEnvironmentStrings = Win32Func(
-    'GetEnvironmentStringsW', 'kernel32', POINTER(c_wchar), [])
-FreeEnvironmentStrings = Win32Func(
-    'FreeEnvironmentStringsW', 'kernel32', BOOL, [POINTER(c_wchar)])
+# ---
+
+CoTaskMemFree = Win32Func('CoTaskMemFree', 'ole32', None, [('ptr', c_void_p)])
+
+SHGetKnownFolderPath = Win32OLEFunc(
+    'SHGetKnownFolderPath', 'shell32', HRESULT,
+    [('rfid', POINTER(GUID)),
+     ('flags', DWORD, 0),
+     ('token', HANDLE, None),
+     ('path', POINTER(POINTER(c_wchar)), OUTPUT_PARAM)])
+
+def _sh_get_known_folder_path_result_handler(result, func, args):
+    if result == S_OK:
+        try:
+            path_ptr = args[3]
+            return ctypes.wstring_at(path_ptr)
+        finally:
+            CoTaskMemFree(path_ptr)
+    else:
+        return args
+
+SHGetKnownFolderPath.errcheck = _sh_get_known_folder_path_result_handler
+
 

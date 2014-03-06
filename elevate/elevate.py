@@ -1,4 +1,4 @@
-from elevate import win32, libc, utilities
+from . import win32, libc, utilities
 
 from collections import namedtuple
 import argparse
@@ -8,9 +8,20 @@ import shutil
 import sys
 import traceback
 import logging
+import multiprocessing
 from multiprocessing.connection import Listener, Client
+from base64 import b64encode, b64decode
 
-logging.basicConfig(filename='elevate.log',
+def elevate_appdata_path():
+    appdata_folder = win32.SHGetKnownFolderPath(
+        win32.GUID(win32.FOLDERID_LocalAppData))
+    elevate_folder = os.path.join(appdata_folder, 'me.nickhutchinson.elevate')
+    os.makedirs(elevate_folder, exist_ok=True)
+    return elevate_folder
+
+
+logging.basicConfig(
+    filename=os.path.join(elevate_appdata_path(), 'elevate.log'),
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s:%(message)s')
 
@@ -22,7 +33,6 @@ def pythonw_interpreter_path():
     head, tail = os.path.split(python_interpreter_path())
     base, ext = os.path.splitext(tail)
     return os.path.join(head, 'pythonw' + ext)
-
 
 def path_to_current_script():
     absolute_script_path = os.path.abspath(sys.argv[0])
@@ -97,8 +107,8 @@ def spawn_user_process_sync(argv, environment):
     # FIXME: we need a win32 message pump to avoid the caller getting the 
     #        wait cursor.
 
+    # MSDN says CreateProcess needs a mutable string
     command_line = utilities.argv_to_command_line(argv)
-    # MSDN says CreateProcess needs a mutable string, for whatever reason.
     command_line_mutable = ctypes.create_unicode_buffer(command_line)
 
     startup_info = win32.STARTUPINFO()
@@ -114,6 +124,14 @@ def spawn_user_process_sync(argv, environment):
     # FIXME exit code
     win32.CloseHandle(proc_info.process)
 
+def process_start_time(process_handle):
+    return int(win32.GetProcessTimes(process_handle)[0])
+
+def standard_handles():
+    handle_ids = (win32.STD_INPUT_HANDLE, win32.STD_OUTPUT_HANDLE,
+                  win32.STD_ERROR_HANDLE)
+    return tuple(win32.GetStdHandle(x) for x in handle_ids)
+
 
 def launch_privileged_helper_sync(argv):
     resolved_path = shutil.which(argv[0])
@@ -121,23 +139,36 @@ def launch_privileged_helper_sync(argv):
         print("File '{}' was not found.".format(argv[0]), file=sys.stderr)
         sys.exit(1)
     
+    authkey = multiprocessing.current_process().authkey
+    authkey_base64 = b64encode(authkey).decode("ascii")
 
-    with Listener() as server:
-        exec_info = win32.SHELLEXECUTEINFO()
-        exec_info.size = ctypes.sizeof(exec_info)
-        exec_info.verb = 'runas'
-        exec_info.mask = (win32.SEE_MASK_FLAG_NO_UI
-                          | win32.SEE_MASK_NOASYNC
-                          | win32.SEE_MASK_NOCLOSEPROCESS
-                          | win32.SEE_MASK_UNICODE)
-        exec_info.show = win32.SW_SHOWNORMAL
-        exec_info.file = pythonw_interpreter_path()
+    exec_info = win32.SHELLEXECUTEINFO()
+    exec_info.size = ctypes.sizeof(exec_info)
+    exec_info.verb = 'runas'
+    exec_info.mask = (win32.SEE_MASK_FLAG_NO_UI
+                      | win32.SEE_MASK_NOASYNC
+                      | win32.SEE_MASK_NOCLOSEPROCESS)
+    exec_info.show = win32.SW_SHOWNORMAL
+    exec_info.file = pythonw_interpreter_path()
+
+    message = {
+        'process_id': win32.GetCurrentProcessId(),
+        'process_start_time':
+            process_start_time(win32.GetCurrentProcess()),
+        'environment_block': utilities.environment_block_snapshot(),
+        'std_handles': standard_handles(),
+        'command': [resolved_path] + argv[1:]
+    }
+    
+    with Listener(authkey=authkey) as server:
         exec_info.parameters = utilities.argv_to_command_line([
             path_to_current_script(),
-            '--named_pipe', server.address, '--',
-            resolved_path] + argv[1:])
+            '--pipe', server.address,
+            '--authkey', authkey_base64])
 
         try:
+            logging.debug('Launching {} {}'.format(exec_info.file,
+                          exec_info.parameters))
             win32.ShellExecuteEx(ctypes.byref(exec_info))
         except OSError as e:
             if e.winerror == win32.ERROR_CANCELLED:
@@ -145,50 +176,66 @@ def launch_privileged_helper_sync(argv):
                 sys.exit(1)
             else:
                 raise
-                
+        
+        logging.debug("Will send message {}".format(message))
         with server.accept() as conn:
-            message = {
-                'environment_block': utilities.environment_block_snapshot()
-                # FIXME
-                # stdout, stderr, stdin handles
-                # pid
-            }
-            logging.debug("Sending message {}".format(message))
+            # xxx
             conn.send(message)
-            
             win32.WaitForSingleObject(exec_info.process, win32.INFINITE)
             # FIXME exit code
             win32.CloseHandle(exec_info.process)
 
 
+def process_from_pid_safe(pid, start_time):
+    process_handle = win32.OpenProcess(win32.PROCESS_ALL_ACCESS, False, pid)
+
+    try:
+        if process_start_time(process_handle) == start_time:
+            rval, process_handle = process_handle, None
+            return rval
+    finally:
+        win32.CloseHandle(process_handle)
+
+
+def try_except(fn):
+    def wrapped(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except:
+            logging.error(traceback.format_exc())
+            raise
+    return wrapped
+
+
+@try_except
 def main():
-    parser = argparse.ArgumentParser(prog='elevate.py')
-    parser.add_argument('--named_pipe', help=argparse.SUPPRESS)
-    parser.add_argument('--passkey', help=argparse.SUPPRESS)    
-    parser.add_argument('command', help='the command to run')
-    parser.add_argument('args', nargs=argparse.REMAINDER,
-                        help=argparse.SUPPRESS)
+    parser = argparse.ArgumentParser(prog='elevate')
     
-    args = parser.parse_args()
-
     if utilities.is_elevated():
+        logging.debug('Privileged helper launched')
+        parser.add_argument('--pipe', help=argparse.SUPPRESS)
+        parser.add_argument('--authkey', help=argparse.SUPPRESS)            
+        args = parser.parse_args()
+
+        logging.debug('Attaching to console')
         attach_to_parent_console()
-        env = None
 
-        if args.named_pipe:
-            with Client(args.named_pipe) as conn:
-                message = conn.recv()
-                env = message['environment_block']
-
-        logging.debug("Received message {}".format(message))
-        spawn_user_process_sync([args.command] + args.args, env)
+        assert args.pipe
+        with Client(args.pipe, authkey=b64decode(args.authkey)) as conn:
+            message = conn.recv()
+        
+        env = message['environment_block']
+        argv = message['command']
+        spawn_user_process_sync(argv, env)
 
     else:
+        parser.add_argument('command', help='the command to run')
+        parser.add_argument('args', nargs=argparse.REMAINDER,
+                            help=argparse.SUPPRESS)
+        
+        args = parser.parse_args()
         launch_privileged_helper_sync([args.command] + args.args)
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        win32.MessageBox(text='{}'.format(traceback.format_exc()))
+    main()

@@ -14,6 +14,7 @@ def DEFAULT_C_SUCCESS(result, *args): return result >= 0
 
 class FuncType:
     Win32 = ctypes.windll, partial(ctypes.WINFUNCTYPE, use_last_error=True)
+    Win32OLE = ctypes.oledll, ctypes.WINFUNCTYPE
     C = ctypes.cdll, partial(ctypes.CFUNCTYPE, use_errno=True)
 
 
@@ -95,6 +96,12 @@ def Win32Func(function_name, module_name, result_type, argument_descriptors,
         function.errcheck = errcheck
 
     return function
+
+
+def Win32OLEFunc(function_name, module_name, result_type,
+                 argument_descriptors):
+    return _NativeFunc(FuncType.Win32OLE, function_name, module_name,
+                       result_type, argument_descriptors)
 
 
 def CFunc(function_name, module_name, result_type, argument_descriptors,

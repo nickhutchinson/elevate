@@ -4,7 +4,7 @@ import weakref
 from ctypes import byref, cast, sizeof, POINTER
 from . import win32
 from . import libc
-
+from . import pyapi
 
 def is_elevated():
     """Return True if the current user has superuser privileges, False
@@ -81,8 +81,11 @@ def _length_of_environment_block(env_block):
 def environment_block_snapshot():
     env_block = win32.GetEnvironmentStrings()
     try:
-        n = _length_of_environment_block(env_block)
-        return cast(env_block, POINTER(ctypes.c_char))[:n]
+        view = pyapi.PyMemoryView_FromMemory(
+            env_block,
+            _length_of_environment_block(env_block),
+            pyapi.PyBUF_READ)
+        return bytes(view)
 
     finally:
         win32.FreeEnvironmentStrings(env_block)
